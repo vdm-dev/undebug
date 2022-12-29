@@ -73,6 +73,7 @@ public:
     MainWindow();
 
     bool openFile(const QString &fileName);
+    void closeFile();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -83,16 +84,12 @@ private slots:
     void saveAs();
     void updateRecentFileActions();
     void openRecentFile();
-#ifndef QT_NO_CLIPBOARD
     void cut();
     void copy();
     void paste();
-#endif
-    void about();
     void updateMenus();
     void updateWindowMenu();
     MdiChild *createMdiChild();
-    void switchLayoutDirection();
 
 private:
     enum { MaxRecentFiles = 5 };
@@ -107,6 +104,10 @@ private:
     MdiChild *activeMdiChild() const;
     QMdiSubWindow *findMdiChild(const QString &fileName) const;
 
+    void readModules();
+    QString getObjectEnvPath(IDiaSymbol* compiland);
+
+private:
     QMdiArea *mdiArea;
 
     QMenu *windowMenu;
@@ -116,11 +117,9 @@ private:
     QAction *recentFileActs[MaxRecentFiles];
     QAction *recentFileSeparator;
     QAction *recentFileSubMenuAct;
-#ifndef QT_NO_CLIPBOARD
     QAction *cutAct;
     QAction *copyAct;
     QAction *pasteAct;
-#endif
     QAction *closeAct;
     QAction *closeAllAct;
     QAction *tileAct;

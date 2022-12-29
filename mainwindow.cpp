@@ -1,8 +1,10 @@
 #include "mainwindow.h"
 
 #include <QtWidgets>
+#include <QDebug>
 
 #include "mdichild.h"
+#include "path.h"
 
 
 MainWindow::MainWindow()
@@ -33,7 +35,7 @@ MainWindow::MainWindow()
 
     readSettings();
 
-    setWindowTitle(tr("MDI"));
+    setWindowTitle("UnDebug");
     setUnifiedTitleAndToolBarOnMac(true);
 }
 
@@ -43,6 +45,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     if (mdiArea->currentSubWindow()) {
         event->ignore();
     } else {
+        closeFile();
         writeSettings();
         event->accept();
     }
@@ -57,6 +60,8 @@ void MainWindow::open()
 
 bool MainWindow::openFile(const QString &fileName)
 {
+    closeFile();
+
     _library = LoadLibraryW(L"msdia140.dll");
     if (!_library)
         return false;
@@ -83,10 +88,10 @@ bool MainWindow::openFile(const QString &fileName)
     result = factory->CreateInstance(NULL, __uuidof(IDiaDataSource), (void**) &_diaDataSource);
     factory->Release();
 
+    QFileInfo fileInfo(fileName);
+
     if (SUCCEEDED(result))
     {
-        QFileInfo fileInfo(fileName);
-
         if (fileInfo.suffix().compare("exe", Qt::CaseInsensitive) == 0)
         {
             result = _diaDataSource->loadDataForExe((wchar_t*) fileName.utf16(), NULL, NULL);
@@ -125,7 +130,36 @@ bool MainWindow::openFile(const QString &fileName)
         return false;
     }
 
+    readModules();
+
+    prependToRecentFiles(fileName);
+
+    setWindowTitle(fileInfo.fileName() + " - UnDebug");
+
     return true;
+}
+
+void MainWindow::closeFile()
+{
+    if (_diaSymbolGlobal)
+    {
+        _diaSymbolGlobal->Release();
+        _diaSymbolGlobal = NULL;
+    }
+    if (_diaSession)
+    {
+        _diaSession->Release();
+        _diaSession = NULL;
+    }
+    if (_diaDataSource)
+    {
+        _diaDataSource->Release();
+        _diaDataSource = NULL;
+    }
+    FreeLibrary(_library);
+    _library = NULL;
+
+    setWindowTitle("UnDebug");
 }
 
 static inline QString recentFilesKey() { return QStringLiteral("recentFileList"); }
@@ -156,19 +190,15 @@ static void writeRecentFiles(const QStringList &files, QSettings &settings)
 
 bool MainWindow::hasRecentFiles()
 {
-    /*
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+    QSettings settings(qApp->applicationDirPath() + "/undebug.ini", QSettings::IniFormat);
     const int count = settings.beginReadArray(recentFilesKey());
     settings.endArray();
     return count > 0;
-    */
-    return false;
 }
 
 void MainWindow::prependToRecentFiles(const QString &fileName)
 {
-    /*
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+    QSettings settings(qApp->applicationDirPath() + "/undebug.ini", QSettings::IniFormat);
 
     const QStringList oldRecentFiles = readRecentFiles(settings);
     QStringList recentFiles = oldRecentFiles;
@@ -178,7 +208,6 @@ void MainWindow::prependToRecentFiles(const QString &fileName)
         writeRecentFiles(recentFiles, settings);
 
     setRecentFilesVisible(!recentFiles.isEmpty());
-    */
 }
 
 void MainWindow::setRecentFilesVisible(bool visible)
@@ -189,8 +218,7 @@ void MainWindow::setRecentFilesVisible(bool visible)
 
 void MainWindow::updateRecentFileActions()
 {
-    /*
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+    QSettings settings(qApp->applicationDirPath() + "/undebug.ini", QSettings::IniFormat);
 
     const QStringList recentFiles = readRecentFiles(settings);
     const int count = qMin(int(MaxRecentFiles), recentFiles.size());
@@ -203,7 +231,6 @@ void MainWindow::updateRecentFileActions()
     }
     for ( ; i < MaxRecentFiles; ++i)
         recentFileActs[i]->setVisible(false);
-    */
 }
 
 void MainWindow::openRecentFile()
@@ -246,13 +273,6 @@ void MainWindow::paste()
         activeMdiChild()->paste();
 }
 #endif
-
-void MainWindow::about()
-{
-   QMessageBox::about(this, tr("About MDI"),
-            tr("The <b>MDI</b> example demonstrates how to write multiple "
-               "document interface applications using Qt."));
-}
 
 void MainWindow::updateMenus()
 {
@@ -369,8 +389,6 @@ void MainWindow::createActions()
 
     setRecentFilesVisible(MainWindow::hasRecentFiles());
 
-    fileMenu->addAction(tr("Switch layout direction"), this, &MainWindow::switchLayoutDirection);
-
     fileMenu->addSeparator();
 
 //! [0]
@@ -448,16 +466,6 @@ void MainWindow::createActions()
     windowMenuSeparatorAct->setSeparator(true);
 
     updateWindowMenu();
-
-    menuBar()->addSeparator();
-
-    QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
-
-    QAction *aboutAct = helpMenu->addAction(tr("&About"), this, &MainWindow::about);
-    aboutAct->setStatusTip(tr("Show the application's About box"));
-
-    QAction *aboutQtAct = helpMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
-    aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
 }
 
 void MainWindow::createStatusBar()
@@ -467,8 +475,7 @@ void MainWindow::createStatusBar()
 
 void MainWindow::readSettings()
 {
-    /*
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+    QSettings settings(qApp->applicationDirPath() + "/undebug.ini", QSettings::IniFormat);
     const QByteArray geometry = settings.value("geometry", QByteArray()).toByteArray();
     if (geometry.isEmpty()) {
         const QRect availableGeometry = screen()->availableGeometry();
@@ -478,15 +485,12 @@ void MainWindow::readSettings()
     } else {
         restoreGeometry(geometry);
     }
-    */
 }
 
 void MainWindow::writeSettings()
 {
-    /*
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+    QSettings settings(qApp->applicationDirPath() + "/undebug.ini", QSettings::IniFormat);
     settings.setValue("geometry", saveGeometry());
-    */
 }
 
 MdiChild *MainWindow::activeMdiChild() const
@@ -509,10 +513,85 @@ QMdiSubWindow *MainWindow::findMdiChild(const QString &fileName) const
     return nullptr;
 }
 
-void MainWindow::switchLayoutDirection()
+void MainWindow::readModules()
 {
-    if (layoutDirection() == Qt::LeftToRight)
-        QGuiApplication::setLayoutDirection(Qt::RightToLeft);
-    else
-        QGuiApplication::setLayoutDirection(Qt::LeftToRight);
+    IDiaEnumSymbols* enumerator;
+
+    if (FAILED(_diaSymbolGlobal->findChildren(SymTagCompiland, NULL, nsNone, &enumerator)))
+        return;
+
+    IDiaSymbol* compiland;
+    ULONG celt = 0;
+
+    while (SUCCEEDED(enumerator->Next(1, &compiland, &celt)) && (celt == 1))
+    {
+        BSTR bstrName;
+        BSTR bstrLibName;
+
+        if (compiland->get_name(&bstrName) != S_OK ||
+            compiland->get_libraryName(&bstrLibName) != S_OK)
+        {
+            qCritical() << "ERROR - Failed to get the compiland's name";
+            compiland->Release();
+            enumerator->Release();
+            return;
+        }
+
+        QString name = QString::fromWCharArray(bstrName);
+        QString libraryName = QString::fromWCharArray(bstrLibName);
+        Path envPath(getObjectEnvPath(compiland), true);
+
+        if (name == libraryName)
+        {
+            // Object/Resource File
+        }
+        else
+        {
+            if (libraryName.startsWith("\\build\\", Qt::CaseInsensitive))
+                libraryName.prepend("D:");
+
+            Path libraryPath(libraryName);
+            if (!libraryPath.isAbsolute())
+            {
+                QString fileName = libraryPath.fileName();
+                libraryPath = envPath;
+                libraryPath.setFileName(fileName);
+            }
+
+            qDebug() << libraryPath.cleanPath();
+        }
+
+        SysFreeString(bstrName);
+        SysFreeString(bstrLibName);
+    }
+
+    enumerator->Release();
+}
+
+QString MainWindow::getObjectEnvPath(IDiaSymbol* compiland)
+{
+    QString result;
+
+    IDiaEnumSymbols* children;
+    if (FAILED(compiland->findChildren(SymTagCompilandEnv, NULL, nsNone, &children)))
+    {
+        qCritical() << "ERROR - Failed to fund SymTagCompilandEnv";
+        return result;
+    }
+
+    IDiaSymbol* symbol;
+    ULONG celt;
+    if (SUCCEEDED(children->Next(1, &symbol, &celt)) && celt == 1)
+    {
+        VARIANT value = { VT_EMPTY };
+        if (SUCCEEDED(symbol->get_value(&value)) && value.vt == VT_BSTR)
+        {
+            result = QString::fromWCharArray(value.bstrVal);
+            VariantClear((VARIANTARG *) &value);
+        }
+        symbol->Release();
+    }
+    children->Release();
+
+    return result;
 }
