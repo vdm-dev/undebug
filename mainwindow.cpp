@@ -515,31 +515,21 @@ QMdiSubWindow *MainWindow::findMdiChild(const QString &fileName) const
 
 void MainWindow::readModules()
 {
-    IDiaEnumSymbols* enumerator;
+    QVector<IDiaSymbol*> compilands = QDIA::findChildren(_diaSymbolGlobal, SymTagCompiland);
 
-    if (FAILED(_diaSymbolGlobal->findChildren(SymTagCompiland, NULL, nsNone, &enumerator)))
-        return;
-
-    IDiaSymbol* compiland;
-    ULONG celt = 0;
-
-    while (SUCCEEDED(enumerator->Next(1, &compiland, &celt)) && (celt == 1))
+    for (int i = 0; i < compilands.size(); ++i)
     {
-        BSTR bstrName;
-        BSTR bstrLibName;
+        QString name = QDIA::getName(compilands[i]);
+        QString libraryName = QDIA::getLibraryName(compilands[i]);
+        Path envPath(getObjectEnvPath(compilands[i]), true);
+        Path namePath(name);
 
-        if (compiland->get_name(&bstrName) != S_OK ||
-            compiland->get_libraryName(&bstrLibName) != S_OK)
+        if (libraryName.endsWith("msvcrt.lib", Qt::CaseInsensitive) ||
+            name.endsWith(".res", Qt::CaseInsensitive) ||
+            name.endsWith(".dll", Qt::CaseInsensitive))
         {
-            qCritical() << "ERROR - Failed to get the compiland's name";
-            compiland->Release();
-            enumerator->Release();
-            return;
+            continue;
         }
-
-        QString name = QString::fromWCharArray(bstrName);
-        QString libraryName = QString::fromWCharArray(bstrLibName);
-        Path envPath(getObjectEnvPath(compiland), true);
 
         if (name == libraryName)
         {
@@ -558,40 +548,95 @@ void MainWindow::readModules()
                 libraryPath.setFileName(fileName);
             }
 
-            qDebug() << libraryPath.cleanPath();
+            libraryPath.resolve();
+            libraryPath.append(namePath.fileName());
+
+            addModuleToTree(libraryPath);
         }
-
-        SysFreeString(bstrName);
-        SysFreeString(bstrLibName);
     }
-
-    enumerator->Release();
 }
 
 QString MainWindow::getObjectEnvPath(IDiaSymbol* compiland)
 {
-    QString result;
+    QVector<IDiaSymbol*> envObjects = QDIA::findChildren(compiland, SymTagCompilandEnv);
 
-    IDiaEnumSymbols* children;
-    if (FAILED(compiland->findChildren(SymTagCompilandEnv, NULL, nsNone, &children)))
+    for (int i = 0; i < envObjects.size(); ++i)
     {
-        qCritical() << "ERROR - Failed to fund SymTagCompilandEnv";
-        return result;
+        if (QDIA::getName(envObjects[i]) == QLatin1String("obj"))
+            return QDIA::getValue(envObjects[i]).toString();
     }
 
-    IDiaSymbol* symbol;
-    ULONG celt;
-    if (SUCCEEDED(children->Next(1, &symbol, &celt)) && celt == 1)
+    return QString();
+}
+
+void MainWindow::addModuleToTree(const Path& path)
+{
+    QTreeWidgetItem* rootItem = nullptr;
+
+    QString fullPath;
+
+    for (int i = 0; i < path.size(); ++i)
     {
-        VARIANT value = { VT_EMPTY };
-        if (SUCCEEDED(symbol->get_value(&value)) && value.vt == VT_BSTR)
+        const QString& pathPart = path.at(i);
+
+        if (i > 0)
+            fullPath += QLatin1Char('/');
+
+        fullPath += pathPart;
+
+        if (pathPart.contains("Release", Qt::CaseInsensitive))
+            continue;
+
+        if (rootItem)
         {
-            result = QString::fromWCharArray(value.bstrVal);
-            VariantClear((VARIANTARG *) &value);
+            bool found = false;
+            for (int treeIndex = 0; treeIndex < rootItem->childCount(); ++treeIndex)
+            {
+                auto item = rootItem->child(treeIndex);
+                if (item->text(0).compare(pathPart, Qt::CaseInsensitive) == 0)
+                {
+                    rootItem = item;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                rootItem = new QTreeWidgetItem(rootItem);
+                rootItem->setText(0, pathPart);
+                rootItem->setToolTip(0, fullPath);
+                if (pathPart.endsWith(".lib", Qt::CaseInsensitive))
+                {
+                    rootItem->setIcon(0, QIcon(":/images/brick.png"));
+                }
+                else if (pathPart.endsWith(".obj", Qt::CaseInsensitive))
+                {
+                    rootItem->setIcon(0, QIcon(":/images/module.png"));
+                }
+                else
+                {
+                    rootItem->setIcon(0, QIcon(":/images/folder.png"));
+                }
+            }
         }
-        symbol->Release();
+        else
+        {
+            for (int treeIndex = 0; treeIndex < _treeModules->topLevelItemCount(); ++treeIndex)
+            {
+                auto item = _treeModules->topLevelItem(treeIndex);
+                if (item->text(0).compare(pathPart, Qt::CaseInsensitive) == 0)
+                {
+                    rootItem = item;
+                    break;
+                }
+            }
+            if (!rootItem)
+            {
+                rootItem = new QTreeWidgetItem(_treeModules);
+                rootItem->setText(0, pathPart);
+                rootItem->setToolTip(0, fullPath);
+                rootItem->setIcon(0, QIcon(":/images/drive.png"));
+            }
+        }
     }
-    children->Release();
-
-    return result;
 }

@@ -53,10 +53,10 @@
 
 #include <QMainWindow>
 
-#define WIN32_LEAN_AND_MEAN
-#include <dia2.h>
+#include "qdia.h"
 
 class MdiChild;
+class Path;
 QT_BEGIN_NAMESPACE
 class QAction;
 class QMenu;
@@ -106,6 +106,7 @@ private:
 
     void readModules();
     QString getObjectEnvPath(IDiaSymbol* compiland);
+    void addModuleToTree(const Path& path);
 
 private:
     QMdiArea *mdiArea;
