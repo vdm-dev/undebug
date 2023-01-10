@@ -533,7 +533,7 @@ void MainWindow::readModules()
 
         if (name == libraryName)
         {
-            // Object/Resource File
+            addModuleToTree(envPath);
         }
         else
         {
