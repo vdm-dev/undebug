@@ -14,13 +14,32 @@ MainWindow::MainWindow()
     , _diaSession(NULL)
     , _diaSymbolGlobal(NULL)
 {
+    QTreeWidgetItem* itemHeader = new QTreeWidgetItem();
+    itemHeader->setText(0, "Module");
+    itemHeader->setText(1, "Path");
+
+    _treeModules = new QTreeWidget();
+    _treeModules->setMinimumWidth(250);
+    _treeModules->setHeaderItem(itemHeader);
+
     QDockWidget* dockModules = new QDockWidget("Modules", this);
     dockModules->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-
-    _treeModules = new QTreeWidget(dockModules);
     dockModules->setWidget(_treeModules);
-
     addDockWidget(Qt::LeftDockWidgetArea, dockModules);
+
+    //
+    itemHeader = new QTreeWidgetItem();
+    itemHeader->setText(0, "Object");
+    itemHeader->setText(1, "Description");
+
+    _treeObjects = new QTreeWidget();
+    _treeObjects->setMinimumWidth(250);
+    _treeObjects->setHeaderItem(itemHeader);
+
+    QDockWidget* dockObjects = new QDockWidget("Objects", this);
+    dockObjects->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    dockObjects->setWidget(_treeObjects);
+    addDockWidget(Qt::LeftDockWidgetArea, dockObjects);
 
 
     mdiArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -36,7 +55,6 @@ MainWindow::MainWindow()
     readSettings();
 
     setWindowTitle("UnDebug");
-    setUnifiedTitleAndToolBarOnMac(true);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -141,6 +159,16 @@ bool MainWindow::openFile(const QString &fileName)
 
 void MainWindow::closeFile()
 {
+    _treeModules->clear();
+    QDockWidget* dock = qobject_cast<QDockWidget*>(_treeModules->parent());
+    if (dock)
+        dock->setWindowTitle("Modules");
+
+    _treeObjects->clear();
+    dock = qobject_cast<QDockWidget*>(_treeObjects->parent());
+    if (dock)
+        dock->setWindowTitle("Objects");
+
     if (_diaSymbolGlobal)
     {
         _diaSymbolGlobal->Release();
@@ -515,128 +543,129 @@ QMdiSubWindow *MainWindow::findMdiChild(const QString &fileName) const
 
 void MainWindow::readModules()
 {
-    QVector<IDiaSymbol*> compilands = QDIA::findChildren(_diaSymbolGlobal, SymTagCompiland);
+    int objCounter = 0;
 
+    QVector<IDiaSymbol*> compilands = QDIA::findChildren(_diaSymbolGlobal, SymTagCompiland);
     for (int i = 0; i < compilands.size(); ++i)
     {
-        QString name = QDIA::getName(compilands[i]);
-        QString libraryName = QDIA::getLibraryName(compilands[i]);
-        Path envPath(getObjectEnvPath(compilands[i]), true);
-        Path namePath(name);
-
-        if (libraryName.endsWith("msvcrt.lib", Qt::CaseInsensitive) ||
-            name.endsWith(".res", Qt::CaseInsensitive) ||
-            name.endsWith(".dll", Qt::CaseInsensitive))
-        {
-            continue;
-        }
-
-        if (name == libraryName)
-        {
-            addModuleToTree(envPath);
-        }
-        else
-        {
-            if (libraryName.startsWith("\\build\\", Qt::CaseInsensitive))
-                libraryName.prepend("D:");
-
-            Path libraryPath(libraryName);
-            if (!libraryPath.isAbsolute())
-            {
-                QString fileName = libraryPath.fileName();
-                libraryPath = envPath;
-                libraryPath.setFileName(fileName);
-            }
-
-            libraryPath.resolve();
-            libraryPath.append(namePath.fileName());
-
-            addModuleToTree(libraryPath);
-        }
-    }
-}
-
-QString MainWindow::getObjectEnvPath(IDiaSymbol* compiland)
-{
-    QVector<IDiaSymbol*> envObjects = QDIA::findChildren(compiland, SymTagCompilandEnv);
-
-    for (int i = 0; i < envObjects.size(); ++i)
-    {
-        if (QDIA::getName(envObjects[i]) == QLatin1String("obj"))
-            return QDIA::getValue(envObjects[i]).toString();
+        addModule(compilands.at(i));
+        if (addObject(compilands.at(i)))
+            objCounter++;
     }
 
-    return QString();
+    _treeModules->resizeColumnToContents(0);
+    _treeObjects->resizeColumnToContents(0);
+    QDockWidget* dock = qobject_cast<QDockWidget*>(_treeModules->parent());
+    if (dock)
+        dock->setWindowTitle(QStringLiteral("Modules (%1)").arg(_treeModules->topLevelItemCount()));
+
+    dock = qobject_cast<QDockWidget*>(_treeObjects->parent());
+    if (dock)
+        dock->setWindowTitle(QStringLiteral("Objects (%1)").arg(objCounter));
 }
 
-void MainWindow::addModuleToTree(const Path& path)
+void MainWindow::addModule(IDiaSymbol* compiland)
 {
+    QString path = QDIA::getName(compiland);
+    QString libraryPath = QDIA::getLibraryName(compiland);
+    QString realPath = QDIA::getEnvPath(compiland);
+
+    QString name;
+    QString libraryName;
+
+    int slash = qMax(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+    name = (slash >= 0) ? path.mid(slash + 1) : path;
+    slash = qMax(libraryPath.lastIndexOf('\\'), libraryPath.lastIndexOf('/'));
+    libraryName = (slash >= 0) ? libraryPath.mid(slash + 1) : libraryPath;
+
+    Qt::CaseSensitivity cs = Qt::CaseInsensitive;
+    bool isLibrary = libraryName.endsWith(".lib", cs);
+
+    if (!isLibrary)
+        libraryName = QLatin1String("Executable");
+
     QTreeWidgetItem* rootItem = nullptr;
-
-    QString fullPath;
-
-    for (int i = 0; i < path.size(); ++i)
+    for (int i = 0; i < _treeModules->topLevelItemCount(); ++i)
     {
-        const QString& pathPart = path.at(i);
-
-        if (i > 0)
-            fullPath += QLatin1Char('/');
-
-        fullPath += pathPart;
-
-        if (pathPart.contains("Release", Qt::CaseInsensitive))
-            continue;
-
-        if (rootItem)
+        if (_treeModules->topLevelItem(i)->text(0).compare(libraryName, cs) == 0)
         {
-            bool found = false;
-            for (int treeIndex = 0; treeIndex < rootItem->childCount(); ++treeIndex)
-            {
-                auto item = rootItem->child(treeIndex);
-                if (item->text(0).compare(pathPart, Qt::CaseInsensitive) == 0)
-                {
-                    rootItem = item;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
-            {
-                rootItem = new QTreeWidgetItem(rootItem);
-                rootItem->setText(0, pathPart);
-                rootItem->setToolTip(0, fullPath);
-                if (pathPart.endsWith(".lib", Qt::CaseInsensitive))
-                {
-                    rootItem->setIcon(0, QIcon(":/images/brick.png"));
-                }
-                else if (pathPart.endsWith(".obj", Qt::CaseInsensitive))
-                {
-                    rootItem->setIcon(0, QIcon(":/images/module.png"));
-                }
-                else
-                {
-                    rootItem->setIcon(0, QIcon(":/images/folder.png"));
-                }
-            }
+            rootItem = _treeModules->topLevelItem(i);
+            break;
+        }
+    }
+
+    if (!rootItem)
+    {
+        rootItem = new QTreeWidgetItem();
+        rootItem->setText(0, libraryName);
+        if (isLibrary)
+        {
+            rootItem->setIcon(0, QIcon(":/images/books_stack.png"));
+            rootItem->setText(1, libraryPath);
+            rootItem->setToolTip(1, rootItem->text(1));
+            _treeModules->addTopLevelItem(rootItem);
         }
         else
         {
-            for (int treeIndex = 0; treeIndex < _treeModules->topLevelItemCount(); ++treeIndex)
-            {
-                auto item = _treeModules->topLevelItem(treeIndex);
-                if (item->text(0).compare(pathPart, Qt::CaseInsensitive) == 0)
-                {
-                    rootItem = item;
-                    break;
-                }
-            }
-            if (!rootItem)
-            {
-                rootItem = new QTreeWidgetItem(_treeModules);
-                rootItem->setText(0, pathPart);
-                rootItem->setToolTip(0, fullPath);
-                rootItem->setIcon(0, QIcon(":/images/drive.png"));
-            }
+            rootItem->setIcon(0, QIcon(":/images/file_extension_exe.png"));
+            _treeModules->insertTopLevelItem(0, rootItem);
         }
     }
+
+    QTreeWidgetItem* item = new QTreeWidgetItem(rootItem);
+    item->setText(0, name);
+    item->setText(1, realPath.isEmpty() ? path : realPath);
+    item->setToolTip(1, item->text(1));
+
+
+    if (name.endsWith(".res", cs))
+    {
+        item->setIcon(0, QIcon(":/images/resources.png"));
+    }
+    else if (name.endsWith(".dll", cs))
+    {
+        item->setIcon(0, QIcon(":/images/file_extension_dll.png"));
+    }
+    else if (name.endsWith(".obj", cs))
+    {
+        item->setIcon(0, QIcon(":/images/module.png"));
+    }
+    else
+    {
+        item->setIcon(0, QIcon(":/images/page_error.png"));
+    }
+}
+
+bool MainWindow::addObject(IDiaSymbol* compiland)
+{
+    Qt::CaseSensitivity cs = Qt::CaseInsensitive;
+
+    QString path = QDIA::getName(compiland);
+    if (!path.endsWith(".obj", cs))
+        return false;
+
+    QString realPath = QDIA::getEnvPath(compiland);
+    if (realPath.isEmpty())
+    {
+        qDebug() << "Empty obj path for" << path;
+        return false;
+    }
+
+    QString libraryPath = QDIA::getLibraryName(compiland);
+
+    QString name;
+    QString libraryName;
+
+    int slash = qMax(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+    name = (slash >= 0) ? path.mid(slash + 1) : path;
+    slash = qMax(libraryPath.lastIndexOf('\\'), libraryPath.lastIndexOf('/'));
+    libraryName = (slash >= 0) ? libraryPath.mid(slash + 1) : libraryPath;
+
+    bool isLibrary = libraryName.endsWith(".lib", cs);
+
+    QTreeWidgetItem* item = new QTreeWidgetItem(_treeObjects);
+    item->setText(0, name);
+    item->setIcon(0, QIcon(":/images/module.png"));
+
+    return true;
 }

@@ -19,6 +19,7 @@ public:
     static QString getName(IDiaSymbol* symbol);
     static QString getLibraryName(IDiaSymbol* symbol);
     static QVariant getValue(IDiaSymbol* symbol);
+    static QString getEnvPath(IDiaSymbol* symbol);
 };
 
 #endif // QDIA_H

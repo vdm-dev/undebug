@@ -9,5 +9,10 @@
         <file>images/drive.png</file>
         <file>images/folder.png</file>
         <file>images/module.png</file>
+        <file>images/books_stack.png</file>
+        <file>images/file_extension_dll.png</file>
+        <file>images/file_extension_exe.png</file>
+        <file>images/resources.png</file>
+        <file>images/page_error.png</file>
     </qresource>
 </RCC>

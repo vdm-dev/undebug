@@ -105,8 +105,8 @@ private:
     QMdiSubWindow *findMdiChild(const QString &fileName) const;
 
     void readModules();
-    QString getObjectEnvPath(IDiaSymbol* compiland);
-    void addModuleToTree(const Path& path);
+    void addModule(IDiaSymbol* compiland);
+    bool addObject(IDiaSymbol* compiland);
 
 private:
     QMdiArea *mdiArea;

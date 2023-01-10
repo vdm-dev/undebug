@@ -113,3 +113,16 @@ QVariant QDIA::getValue(IDiaSymbol* symbol)
     VariantClear(&value);
     return result;
 }
+
+QString QDIA::getEnvPath(IDiaSymbol* symbol)
+{
+    QVector<IDiaSymbol*> objects = QDIA::findChildren(symbol, SymTagCompilandEnv);
+
+    for (int i = 0; i < objects.size(); ++i)
+    {
+        if (QDIA::getName(objects[i]) == QLatin1String("obj"))
+            return QDIA::getValue(objects[i]).toString();
+    }
+
+    return QString();
+}
