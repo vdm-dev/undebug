@@ -645,12 +645,6 @@ bool MainWindow::addObject(IDiaSymbol* compiland)
         return false;
 
     QString realPath = QDIA::getEnvPath(compiland);
-    if (realPath.isEmpty())
-    {
-        qDebug() << "Empty obj path for" << path;
-        return false;
-    }
-
     QString libraryPath = QDIA::getLibraryName(compiland);
 
     QString name;
@@ -661,11 +655,72 @@ bool MainWindow::addObject(IDiaSymbol* compiland)
     slash = qMax(libraryPath.lastIndexOf('\\'), libraryPath.lastIndexOf('/'));
     libraryName = (slash >= 0) ? libraryPath.mid(slash + 1) : libraryPath;
 
-    bool isLibrary = libraryName.endsWith(".lib", cs);
+    //bool isLibrary = libraryName.endsWith(".lib", cs);
 
-    QTreeWidgetItem* item = new QTreeWidgetItem(_treeObjects);
-    item->setText(0, name);
-    item->setIcon(0, QIcon(":/images/module.png"));
+    Path pathTree = realPath.isEmpty() ? ("UNRESOLVED/" + path) : realPath;
+
+    QTreeWidgetItem* root = nullptr;
+
+    for (int i = 0; i < pathTree.size() - 1; ++i)
+    {
+        QString element = pathTree.at(i);
+
+        if (i == 0)
+        {
+            int sorted = _treeObjects->topLevelItemCount();
+
+            for (int j = 0; j < _treeObjects->topLevelItemCount(); ++j)
+            {
+                int check = element.compare(_treeObjects->topLevelItem(j)->text(0), cs);
+
+                if (check > 0)
+                {
+                    sorted = j;
+                }
+                else if (check == 0)
+                {
+                    root = _treeObjects->topLevelItem(j);
+                    break;
+                }
+            }
+            if (!root)
+            {
+                root = new QTreeWidgetItem();
+                root->setText(0, element);
+                root->setIcon(0, QIcon(":/images/drive.png"));
+                _treeObjects->insertTopLevelItem(sorted, root);
+            }
+            continue;
+        }
+
+        if (!root)
+            return false;
+
+        bool found = false;
+
+        for (int j = 0; j < root->childCount(); ++j)
+        {
+            if (element.compare(root->child(j)->text(0), cs) == 0)
+            {
+                root = root->child(j);
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            root = new QTreeWidgetItem(root);
+            root->setText(0, element);
+            root->setIcon(0, QIcon(":/images/folder.png"));
+        }
+    }
+
+    QTreeWidgetItem* objectItem = new QTreeWidgetItem(root);
+    objectItem->setText(0, name);
+    objectItem->setText(1, realPath.isEmpty() ? path : realPath);
+    objectItem->setToolTip(1, objectItem->text(1));
+    objectItem->setIcon(0, QIcon(":/images/module.png"));
 
     return true;
 }
