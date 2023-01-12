@@ -126,3 +126,216 @@ QString QDIA::getEnvPath(IDiaSymbol* symbol)
 
     return QString();
 }
+
+QString QDIA::getUndName(IDiaSymbol* symbol)
+{
+    QString result;
+
+    if (!symbol)
+        return result;
+
+    CComBSTR string;
+    if (SUCCEEDED(symbol->get_undecoratedName(&string)))
+    {
+        result = QString::fromWCharArray(BSTR(string), string.Length());
+    }
+    else
+    {
+        result = getName(symbol);
+    }
+
+    return result;
+}
+
+QString QDIA::getTypeString(IDiaSymbol* symbol)
+{
+    IDiaSymbol *pBaseType;
+    IDiaEnumSymbols *pEnumSym;
+    IDiaSymbol *pSym;
+    DWORD dwTag;
+    DWORD dwInfo;
+    BOOL bSet;
+    DWORD dwRank;
+    LONG lCount = 0;
+    ULONG celt = 1;
+
+    QString result;
+
+    if (FAILED(symbol->get_symTag(&dwTag)))
+        return result;
+
+    QString bstrName = getName(symbol);
+
+    if (dwTag != SymTagPointerType)
+    {
+        if ((symbol->get_constType(&bSet) == S_OK) && bSet)
+            result += "const ";
+
+        if ((symbol->get_volatileType(&bSet) == S_OK) && bSet)
+            result += "volatile ";
+
+        if ((symbol->get_unalignedType(&bSet) == S_OK) && bSet)
+            result += "__unaligned ";
+    }
+
+    ULONGLONG ulLen;
+
+    symbol->get_length(&ulLen);
+
+    switch (dwTag) {
+      case SymTagUDT:
+        //PrintUdtKind(symbol);
+        //PrintName(symbol);
+        break;
+
+      case SymTagEnum:
+        result += "enum ";
+        result += getUndName(symbol);
+        break;
+
+      case SymTagFunctionType:
+        result += "function ";
+        break;
+
+      case SymTagPointerType:
+        if (FAILED(symbol->get_type(&pBaseType)))
+          return result;
+
+        result += getTypeString(pBaseType);
+        pBaseType->Release();
+
+        if ((symbol->get_reference(&bSet) == S_OK) && bSet) {
+          result += " &";
+        }
+
+        else {
+          result += " *";
+        }
+
+        if ((symbol->get_constType(&bSet) == S_OK) && bSet) {
+          result += " const";
+        }
+
+        if ((symbol->get_volatileType(&bSet) == S_OK) && bSet) {
+          result += " volatile";
+        }
+
+        if ((symbol->get_unalignedType(&bSet) == S_OK) && bSet) {
+          result += " __unaligned";
+        }
+        break;
+
+      case SymTagArrayType:
+        break;
+
+      case SymTagBaseType:
+        if (symbol->get_baseType(&dwInfo) != S_OK) {
+          return result;
+        }
+
+        switch (dwInfo) {
+          case btUInt :
+            result += "unsigned ";
+
+          // Fall through
+
+          case btInt :
+            switch (ulLen) {
+              case 1:
+                if (dwInfo == btInt) {
+                  result += "signed ";
+                }
+
+                result += "char";
+                break;
+
+              case 2:
+                result += "short";
+                break;
+
+              case 4:
+                result += "int";
+                break;
+
+              case 8:
+                result += "__int64";
+                break;
+            }
+
+            dwInfo = 0xFFFFFFFF;
+            break;
+
+          case btFloat :
+            switch (ulLen) {
+              case 4:
+                result += "float";
+                break;
+
+              case 8:
+                result += "double";
+                break;
+            }
+
+            dwInfo = 0xFFFFFFFF;
+            break;
+        }
+
+        if (dwInfo == 0xFFFFFFFF) {
+           break;
+        }
+
+        //wprintf(L"%s", rgBaseType[dwInfo]);
+        break;
+
+      case SymTagTypedef:
+        result += bstrName;
+        break;
+
+      case SymTagCustomType:
+        {
+          DWORD idOEM, idOEMSym;
+          DWORD cbData = 0;
+          DWORD count;
+
+          if (symbol->get_oemId(&idOEM) == S_OK) {
+            wprintf(L"OEMId = %X, ", idOEM);
+          }
+
+          if (symbol->get_oemSymbolId(&idOEMSym) == S_OK) {
+            wprintf(L"SymbolId = %X, ", idOEMSym);
+          }
+
+          if (symbol->get_types(0, &count, NULL) == S_OK) {
+            IDiaSymbol** rgpDiaSymbols = (IDiaSymbol**) _alloca(sizeof(IDiaSymbol *) * count);
+
+            if (symbol->get_types(count, &count, rgpDiaSymbols) == S_OK) {
+              for (ULONG i = 0; i < count; i++) {
+                result += getTypeString(rgpDiaSymbols[i]);
+                rgpDiaSymbols[i]->Release();
+              }
+            }
+          }
+
+          // print custom data
+
+          if ((symbol->get_dataBytes(cbData, &cbData, NULL) == S_OK) && (cbData != 0)) {
+            wprintf(L", Data: ");
+
+            BYTE *pbData = new BYTE[cbData];
+
+            symbol->get_dataBytes(cbData, &cbData, pbData);
+
+            for (ULONG i = 0; i < cbData; i++) {
+              wprintf(L"0x%02X ", pbData[i]);
+            }
+
+            delete [] pbData;
+          }
+        }
+        break;
+
+      case SymTagData: // This really is member data, just print its location
+        break;
+    }
+    return result;
+}

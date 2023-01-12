@@ -14,5 +14,10 @@
         <file>images/file_extension_exe.png</file>
         <file>images/resources.png</file>
         <file>images/page_error.png</file>
+        <file>images/function.png</file>
+        <file>images/math_functions.png</file>
+        <file>images/database_green.png</file>
+        <file>images/text_functions.png</file>
+        <file>images/token_lookaround.png</file>
     </qresource>
 </RCC>

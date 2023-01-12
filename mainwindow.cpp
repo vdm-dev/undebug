@@ -722,5 +722,64 @@ bool MainWindow::addObject(IDiaSymbol* compiland)
     objectItem->setToolTip(1, objectItem->text(1));
     objectItem->setIcon(0, QIcon(":/images/module.png"));
 
+    addSymbols(compiland, objectItem);
+
     return true;
+}
+
+void MainWindow::addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent)
+{
+    QTreeWidgetItem* typedefsItem = new QTreeWidgetItem();
+    addSymbolTypedefs(compiland, typedefsItem);
+    if (typedefsItem->childCount() > 0)
+    {
+        parent->addChild(typedefsItem);
+        typedefsItem->setText(0, QStringLiteral("Typedefs (%1)").arg(typedefsItem->childCount()));
+        typedefsItem->setIcon(0, QIcon(":/images/database_green.png"));
+    }
+    else
+    {
+        delete typedefsItem;
+    }
+
+    QTreeWidgetItem* functionsItem = new QTreeWidgetItem();
+    addSymbolFunctions(compiland, functionsItem);
+    if (functionsItem->childCount() > 0)
+    {
+        parent->addChild(functionsItem);
+        functionsItem->setText(0, QStringLiteral("Functions (%1)").arg(functionsItem->childCount()));
+        functionsItem->setIcon(0, QIcon(":/images/math_functions.png"));
+    }
+    else
+    {
+        delete functionsItem;
+    }
+}
+
+void MainWindow::addSymbolTypedefs(IDiaSymbol* compiland, QTreeWidgetItem* parent)
+{
+    auto typedefs = QDIA::findChildren(compiland, SymTagTypedef);
+    for (int i = 0; i < typedefs.count(); ++i)
+    {
+        IDiaSymbol* tdef = typedefs.at(i);
+        IDiaSymbol* typeOfDef;
+        if (SUCCEEDED(tdef->get_type(&typeOfDef)))
+        {
+            QTreeWidgetItem* tdefItem = new QTreeWidgetItem(parent);
+            tdefItem->setText(0, QDIA::getTypeString(typeOfDef) + ' ' + QDIA::getName(tdef));
+            tdefItem->setIcon(0, QIcon(":/images/token_lookaround.png"));
+        }
+    }
+}
+
+void MainWindow::addSymbolFunctions(IDiaSymbol* compiland, QTreeWidgetItem* parent)
+{
+    auto functions = QDIA::findChildren(compiland, SymTagFunction);
+    for (int i = 0; i < functions.count(); ++i)
+    {
+        IDiaSymbol* function = functions.at(i);
+        QTreeWidgetItem* functionItem = new QTreeWidgetItem(parent);
+        functionItem->setText(0, QDIA::getUndName(function));
+        functionItem->setIcon(0, QIcon(":/images/function.png"));
+    }
 }

@@ -57,13 +57,14 @@
 
 class MdiChild;
 class Path;
-QT_BEGIN_NAMESPACE
+
 class QAction;
 class QMenu;
 class QMdiArea;
 class QMdiSubWindow;
 class QTreeWidget;
-QT_END_NAMESPACE
+class QTreeWidgetItem;
+
 
 class MainWindow : public QMainWindow
 {
@@ -107,6 +108,9 @@ private:
     void readModules();
     void addModule(IDiaSymbol* compiland);
     bool addObject(IDiaSymbol* compiland);
+    void addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent);
+    void addSymbolTypedefs(IDiaSymbol* compiland, QTreeWidgetItem* parent);
+    void addSymbolFunctions(IDiaSymbol* compiland, QTreeWidgetItem* parent);
 
 private:
     QMdiArea *mdiArea;
