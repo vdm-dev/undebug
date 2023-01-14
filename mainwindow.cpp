@@ -2,6 +2,7 @@
 
 #include <QtWidgets>
 #include <QDebug>
+#include <QMap>
 
 #include "mdichild.h"
 #include "path.h"
@@ -14,32 +15,10 @@ MainWindow::MainWindow()
     , _diaSession(NULL)
     , _diaSymbolGlobal(NULL)
 {
-    QTreeWidgetItem* itemHeader = new QTreeWidgetItem();
-    itemHeader->setText(0, "Module");
-    itemHeader->setText(1, "Path");
-
-    _treeModules = new QTreeWidget();
-    _treeModules->setMinimumWidth(250);
-    _treeModules->setHeaderItem(itemHeader);
-
-    QDockWidget* dockModules = new QDockWidget("Modules", this);
-    dockModules->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    dockModules->setWidget(_treeModules);
-    addDockWidget(Qt::LeftDockWidgetArea, dockModules);
-
-    //
-    itemHeader = new QTreeWidgetItem();
-    itemHeader->setText(0, "Object");
-    itemHeader->setText(1, "Description");
-
-    _treeObjects = new QTreeWidget();
-    _treeObjects->setMinimumWidth(250);
-    _treeObjects->setHeaderItem(itemHeader);
-
-    QDockWidget* dockObjects = new QDockWidget("Objects", this);
-    dockObjects->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    dockObjects->setWidget(_treeObjects);
-    addDockWidget(Qt::LeftDockWidgetArea, dockObjects);
+    createDockedTree(&_treeModules, "Modules", QStringList({"Module", "Path"}));
+    createDockedTree(&_treeObjects, "Objects", QStringList({"Object", "Description"}));
+    createDockedTree(&_treeTest, "Test", QStringList({"Test"}));
+    createDockedTree(&_treeTypedefs, "Typedefs", QStringList({"Base Type", "New Type"}));
 
 
     mdiArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -149,6 +128,8 @@ bool MainWindow::openFile(const QString &fileName)
     }
 
     readModules();
+    //readSourceFiles();
+    readTypedefs();
 
     prependToRecentFiles(fileName);
 
@@ -375,6 +356,27 @@ MdiChild *MainWindow::createMdiChild()
     return child;
 }
 
+void MainWindow::createDockedTree(QTreeWidget** widget, const QString& name,
+                                  const QStringList& header)
+{
+    (*widget) = new QTreeWidget();
+    (*widget)->setMinimumWidth(250);
+
+    if (!header.isEmpty())
+    {
+        QTreeWidgetItem* itemHeader = new QTreeWidgetItem();
+        for (int i = 0; i < header.size(); ++i)
+            itemHeader->setText(i, header.at(i));
+
+        (*widget)->setHeaderItem(itemHeader);
+    }
+
+    QDockWidget* dockModules = new QDockWidget(name, this);
+    dockModules->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    dockModules->setWidget(*widget);
+    addDockWidget(Qt::LeftDockWidgetArea, dockModules);
+}
+
 void MainWindow::createActions()
 {
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
@@ -543,6 +545,40 @@ QMdiSubWindow *MainWindow::findMdiChild(const QString &fileName) const
 
 void MainWindow::readModules()
 {
+    /*
+    QTreeWidgetItem* roots[SymTagMax] = { nullptr };
+    DWORD tag;
+
+    QVector<IDiaSymbol*> symbols = QDIA::findChildren(_diaSymbolGlobal, SymTagNull);
+    for (int i = 0; i < symbols.size(); ++i)
+    {
+        IDiaSymbol* symbol = symbols.at(i);
+        if (FAILED(symbol->get_symTag(&tag)))
+            return;
+
+        if (tag >= SymTagMax)
+        {
+            qDebug() << "Invalid tag value" << tag;
+            continue;
+        }
+
+        if (!roots[tag])
+        {
+            roots[tag] = new QTreeWidgetItem(_treeTest);
+            roots[tag]->setText(0, QDIA::getSymbolType(symbol));
+            roots[tag]->setIcon(0, QIcon(":/images/folder.png"));
+        }
+
+        QString name = QDIA::getName(symbol);
+        if (name.isEmpty())
+            name = QStringLiteral("(empty)");
+
+        QTreeWidgetItem* item = new QTreeWidgetItem(roots[tag]);
+        item->setText(0, name);
+    }
+    */
+
+
     int objCounter = 0;
 
     QVector<IDiaSymbol*> compilands = QDIA::findChildren(_diaSymbolGlobal, SymTagCompiland);
@@ -562,6 +598,59 @@ void MainWindow::readModules()
     dock = qobject_cast<QDockWidget*>(_treeObjects->parent());
     if (dock)
         dock->setWindowTitle(QStringLiteral("Objects (%1)").arg(objCounter));
+}
+
+void MainWindow::readSourceFiles()
+{
+    QMap<QString, QList<Path>> map;
+
+    QVector<IDiaSymbol*> compilands = QDIA::findChildren(_diaSymbolGlobal, SymTagCompiland);
+    for (int i = 0; i < compilands.size(); ++i)
+    {
+        QVector<IDiaSourceFile*> files = QDIA::findSourceFiles(_diaSession, compilands.at(i));
+        for (int j = 0; j < files.size(); ++j)
+        {
+            IDiaSourceFile* file = files.at(j);
+            QString fileName = QDIA::getFileName(file);
+            Path path(fileName);
+            QList<Path>& plist = map[path.fileName().toLower()];
+            bool found = false;
+            for (int k = 0; k < plist.size(); ++k)
+            {
+                if (plist.at(k).compare(path) == 0)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                plist << path;
+        }
+    }
+
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+    {
+        const QList<Path>& plist = it.value();
+
+        if (plist.size() < 2)
+            continue;
+
+        QString str = it.key() + ": [";
+        for (int i = 0; i < plist.size(); ++i)
+            str += plist.at(i).path() + "; ";
+
+        str += ']';
+        qDebug() << str;
+    }
+}
+
+void MainWindow::readTypedefs()
+{
+    QVector<IDiaSymbol*> typedefs = QDIA::findChildren(_diaSymbolGlobal, SymTagTypedef);
+    for (int i = 0; i < typedefs.size(); ++i)
+    {
+        addTypedef(typedefs.at(i), nullptr);
+    }
 }
 
 void MainWindow::addModule(IDiaSymbol* compiland)
@@ -730,7 +819,7 @@ bool MainWindow::addObject(IDiaSymbol* compiland)
 void MainWindow::addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent)
 {
     QTreeWidgetItem* typedefsItem = new QTreeWidgetItem();
-    addSymbolTypedefs(compiland, typedefsItem);
+    //addTypedef(compiland, typedefsItem);
     if (typedefsItem->childCount() > 0)
     {
         parent->addChild(typedefsItem);
@@ -756,20 +845,41 @@ void MainWindow::addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent)
     }
 }
 
-void MainWindow::addSymbolTypedefs(IDiaSymbol* compiland, QTreeWidgetItem* parent)
+void MainWindow::addTypedef(IDiaSymbol* symbol, QTreeWidgetItem* parent)
 {
-    auto typedefs = QDIA::findChildren(compiland, SymTagTypedef);
-    for (int i = 0; i < typedefs.count(); ++i)
+    QString name = QDIA::getName(symbol);
+    QString type = QDIA::getTypeOfTypedef(symbol);
+
+    QTreeWidgetItem* item = nullptr;
+    if (parent)
     {
-        IDiaSymbol* tdef = typedefs.at(i);
-        IDiaSymbol* typeOfDef;
-        if (SUCCEEDED(tdef->get_type(&typeOfDef)))
-        {
-            QTreeWidgetItem* tdefItem = new QTreeWidgetItem(parent);
-            tdefItem->setText(0, QDIA::getTypeString(typeOfDef) + ' ' + QDIA::getName(tdef));
-            tdefItem->setIcon(0, QIcon(":/images/token_lookaround.png"));
-        }
+        parent->addChild(item);
     }
+    else
+    {
+        int position = _treeTypedefs->topLevelItemCount();
+
+        for (int i = 0; i < _treeTypedefs->topLevelItemCount(); ++i)
+        {
+            item = _treeTypedefs->topLevelItem(i);
+
+            if (name > item->text(1))
+                continue;
+
+            if (name == item->text(1) && type == item->text(0))
+                return;
+
+            position = i;
+            break;
+        }
+
+        item = new QTreeWidgetItem();
+        _treeTypedefs->insertTopLevelItem(position, item);
+    }
+    item->setText(0, type);
+    item->setText(1, name);
+    item->setIcon(0, QIcon(":/images/token_lookaround.png"));
+
 }
 
 void MainWindow::addSymbolFunctions(IDiaSymbol* compiland, QTreeWidgetItem* parent)

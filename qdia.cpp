@@ -1,5 +1,7 @@
 #include "qdia.h"
 
+#include <QDebug>
+
 QVector<IDiaSymbol*> QDIA::findChildren(IDiaSymbol* parent, enum SymTagEnum symtag, const QString& name, DWORD compareFlags)
 {
     QVector<IDiaSymbol*> result;
@@ -21,6 +23,44 @@ QVector<IDiaSymbol*> QDIA::findChildren(IDiaSymbol* parent, enum SymTagEnum symt
     ULONG retrieved = 0;
     if (FAILED(enumerator->Next(count, result.data(), &retrieved)) || retrieved != count)
         result.clear();
+
+    return result;
+}
+
+QVector<IDiaSourceFile*> QDIA::findSourceFiles(IDiaSession* session, IDiaSymbol* parent)
+{
+    QVector<IDiaSourceFile*> result;
+    if (!session || !parent)
+        return result;
+
+    CComPtr<IDiaEnumSourceFiles> enumerator;
+
+    if (FAILED(session->findFile(parent, NULL, nsNone, &enumerator)))
+        return result;
+
+    LONG count = 0;
+    if (FAILED(enumerator->get_Count(&count)))
+        return result;
+
+    result.resize(count);
+
+    ULONG retrieved = 0;
+    if (FAILED(enumerator->Next(count, result.data(), &retrieved)) || retrieved != count)
+        result.clear();
+
+    return result;
+}
+
+QString QDIA::getFileName(IDiaSourceFile* sourceFile)
+{
+    QString result;
+
+    if (!sourceFile)
+        return result;
+
+    CComBSTR string;
+    if (SUCCEEDED(sourceFile->get_fileName(&string)))
+        result = QString::fromWCharArray(BSTR(string), string.Length());
 
     return result;
 }
@@ -338,4 +378,286 @@ QString QDIA::getTypeString(IDiaSymbol* symbol)
         break;
     }
     return result;
+}
+
+QString QDIA::getTypeOfTypedef(IDiaSymbol* symbol)
+{
+    CComPtr<IDiaSymbol> typeSymbol = nullptr;
+    DWORD tag;
+
+    if (!symbol || FAILED(symbol->get_type(&typeSymbol)) || !typeSymbol ||
+        FAILED(typeSymbol->get_symTag(&tag)))
+    {
+        return QString();
+    }
+
+    QString result;
+
+    if (tag != SymTagPointerType)
+    {
+        BOOL flag;
+        if (SUCCEEDED(typeSymbol->get_constType(&flag)) && flag)
+            result += "const ";
+        if (SUCCEEDED(typeSymbol->get_volatileType(&flag)) && flag)
+            result += "volatile ";
+        if (SUCCEEDED(typeSymbol->get_unalignedType(&flag)) && flag)
+            result += "__unaligned ";
+    }
+
+    switch (tag)
+    {
+    case SymTagBaseType:
+        result += getNameOfBasicType(typeSymbol);
+    case SymTagPointerType:
+        result += getNameOfPointerType(typeSymbol);
+    case SymTagTypedef:
+    default:
+        result += getName(typeSymbol);
+        break;
+    }
+
+    return result;
+}
+
+QString QDIA::getNameOfBasicType(IDiaSymbol* baseType)
+{
+    DWORD type;
+    if (FAILED(baseType->get_baseType(&type)))
+        return QString();
+
+    switch (type)
+    {
+    case btNoType:
+        qWarning() << "type == btNoType";
+        return "(no type)";
+    case btVoid:
+        return "void";
+    case btChar:
+        return "char";
+    case btWChar:
+        return "wchar_t";
+    case btInt:
+        return "int";
+    case btUInt:
+        return "unsigned int";
+    case btFloat:
+        return "flot";
+    case btBCD:
+        qWarning() << "type == btBCD";
+        return "BCD";
+    case btBool:
+        qWarning() << "type == btBool";
+        return "bool";
+    case btLong:
+        return "long";
+    case btULong:
+        return "unsigned long";
+    case btCurrency:
+        qWarning() << "type == btCurrency";
+        return "CURRENCY";
+    case btDate:
+        qWarning() << "type == btDate";
+        return "DATE";
+    case btVariant:
+        qWarning() << "type == btVariant";
+        return "VARIANT";
+    case btComplex:
+        qWarning() << "type == btComplex";
+        return "COMPLEX";
+    case btBit:
+        qWarning() << "type == btBit";
+        return "BIT";
+    case btBSTR:
+        return "BSTR";
+    case btHresult:
+        return "HRESULT";
+    case btChar16:
+        qWarning() << "type == btChar16";
+        return "char16_t";
+    case btChar32:
+        qWarning() << "type == btChar32";
+        return "char32_t";
+    case btChar8:
+        qWarning() << "type == btChar8";
+        return "char8_t";
+    default:
+        return QString();
+    }
+}
+
+QString QDIA::getNameOfPointerType(IDiaSymbol* pointerType)
+{
+    QString result = getTypeOfTypedef(pointerType);
+    if (result.isEmpty())
+        return QString();
+
+    BOOL flag;
+    if (SUCCEEDED(pointerType->get_reference(&flag)) && flag)
+    {
+        result += " &";
+    }
+    else
+    {
+        result += " *";
+    }
+
+    if (SUCCEEDED(pointerType->get_constType(&flag)) && flag)
+        result += " const";
+    if (SUCCEEDED(pointerType->get_volatileType(&flag)) && flag)
+        result += " volatile";
+    if (SUCCEEDED(pointerType->get_unalignedType(&flag)) && flag)
+        result += " __unaligned";
+
+    return result;
+}
+
+QString QDIA::getSymbolTag(IDiaSymbol* symbol)
+{
+    if (!symbol)
+        return QString();
+
+    DWORD tag;
+    if (FAILED(symbol->get_symTag(&tag)))
+        return QString();
+
+    switch (tag)
+    {
+    case SymTagNull:
+        return QStringLiteral("SymTagNull");
+
+    case SymTagExe:
+        return QStringLiteral("SymTagExe");
+
+    case SymTagCompiland:
+        return QStringLiteral("SymTagCompiland");
+
+    case SymTagCompilandDetails:
+        return QStringLiteral("SymTagCompilandDetails");
+
+    case SymTagCompilandEnv:
+        return QStringLiteral("SymTagCompilandEnv");
+
+    case SymTagFunction:
+        return QStringLiteral("SymTagFunction");
+
+    case SymTagBlock:
+        return QStringLiteral("SymTagBlock");
+
+    case SymTagData:
+        return QStringLiteral("SymTagData");
+
+    case SymTagAnnotation:
+        return QStringLiteral("SymTagAnnotation");
+
+    case SymTagLabel:
+        return QStringLiteral("SymTagLabel");
+
+    case SymTagPublicSymbol:
+        return QStringLiteral("SymTagPublicSymbol");
+
+    case SymTagUDT:
+        return QStringLiteral("SymTagUDT");
+
+    case SymTagEnum:
+        return QStringLiteral("SymTagEnum");
+
+    case SymTagFunctionType:
+        return QStringLiteral("SymTagFunctionType");
+
+    case SymTagPointerType:
+        return QStringLiteral("SymTagPointerType");
+
+    case SymTagArrayType:
+        return QStringLiteral("SymTagArrayType");
+
+    case SymTagBaseType:
+        return QStringLiteral("SymTagBaseType");
+
+    case SymTagTypedef:
+        return QStringLiteral("SymTagTypedef");
+
+    case SymTagBaseClass:
+        return QStringLiteral("SymTagBaseClass");
+
+    case SymTagFriend:
+        return QStringLiteral("SymTagFriend");
+
+    case SymTagFunctionArgType:
+        return QStringLiteral("SymTagFunctionArgType");
+
+    case SymTagFuncDebugStart:
+        return QStringLiteral("SymTagFuncDebugStart");
+
+    case SymTagFuncDebugEnd:
+        return QStringLiteral("SymTagFuncDebugEnd");
+
+    case SymTagUsingNamespace:
+        return QStringLiteral("SymTagUsingNamespace");
+
+    case SymTagVTableShape:
+        return QStringLiteral("SymTagVTableShape");
+
+    case SymTagVTable:
+        return QStringLiteral("SymTagVTable");
+
+    case SymTagCustom:
+        return QStringLiteral("SymTagVTable");
+
+    case SymTagThunk:
+        return QStringLiteral("SymTagThunk");
+
+    case SymTagCustomType:
+        return QStringLiteral("SymTagCustomType");
+
+    case SymTagManagedType:
+        return QStringLiteral("SymTagManagedType");
+
+    case SymTagDimension:
+        return QStringLiteral("SymTagDimension");
+
+    case SymTagCallSite:
+        return QStringLiteral("SymTagCallSite");
+
+    case SymTagInlineSite:
+        return QStringLiteral("SymTagInlineSite");
+
+    case SymTagBaseInterface:
+        return QStringLiteral("SymTagBaseInterface");
+
+    case SymTagVectorType:
+        return QStringLiteral("SymTagVectorType");
+
+    case SymTagMatrixType:
+        return QStringLiteral("SymTagMatrixType");
+
+    case SymTagHLSLType:
+        return QStringLiteral("SymTagHLSLType");
+
+    case SymTagCaller:
+        return QStringLiteral("SymTagCaller");
+
+    case SymTagCallee:
+        return QStringLiteral("SymTagCallee");
+
+    case SymTagExport:
+        return QStringLiteral("SymTagExport");
+
+    case SymTagHeapAllocationSite:
+        return QStringLiteral("SymTagHeapAllocationSite");
+
+    case SymTagCoffGroup:
+        return QStringLiteral("SymTagCoffGroup");
+
+    case SymTagInlinee:
+        return QStringLiteral("SymTagInlinee");
+
+    case SymTagTaggedUnionCase:
+        return QStringLiteral("SymTagTaggedUnionCase");
+
+    case SymTagMax:
+        return QStringLiteral("SymTagMax");
+
+    default:
+        return QString();
+    }
 }

@@ -95,6 +95,8 @@ private slots:
 private:
     enum { MaxRecentFiles = 5 };
 
+    void createDockedTree(QTreeWidget** widget, const QString& name,
+                          const QStringList& header = QStringList());
     void createActions();
     void createStatusBar();
     void readSettings();
@@ -106,10 +108,12 @@ private:
     QMdiSubWindow *findMdiChild(const QString &fileName) const;
 
     void readModules();
+    void readSourceFiles();
+    void readTypedefs();
     void addModule(IDiaSymbol* compiland);
     bool addObject(IDiaSymbol* compiland);
     void addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent);
-    void addSymbolTypedefs(IDiaSymbol* compiland, QTreeWidgetItem* parent);
+    void addTypedef(IDiaSymbol* symbol, QTreeWidgetItem* parent);
     void addSymbolFunctions(IDiaSymbol* compiland, QTreeWidgetItem* parent);
 
 private:
@@ -136,6 +140,8 @@ private:
     QTreeWidget* _treeModules;
     QTreeWidget* _treeObjects;
     QTreeWidget* _treeSources;
+    QTreeWidget* _treeTest;
+    QTreeWidget* _treeTypedefs;
 
 private:
     HMODULE _library;
