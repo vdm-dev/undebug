@@ -23,10 +23,11 @@ public:
     static QVariant getValue(IDiaSymbol* symbol);
     static QString getEnvPath(IDiaSymbol* symbol);
     static QString getUndName(IDiaSymbol* symbol);
-    static QString getTypeString(IDiaSymbol* symbol);
-    static QString getTypeOfTypedef(IDiaSymbol* symbol);
+    static QString getTypeInformation(IDiaSymbol* symbol);
     static QString getNameOfBasicType(IDiaSymbol* baseType);
     static QString getNameOfPointerType(IDiaSymbol* pointerType);
+    static QString getNameOfFunctionType(IDiaSymbol* functionType);
+    static QString getNameOfUserType(IDiaSymbol* userType);
     static QString getSymbolTag(IDiaSymbol* symbol);
 };
 

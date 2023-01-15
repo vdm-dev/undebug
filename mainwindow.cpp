@@ -128,7 +128,7 @@ bool MainWindow::openFile(const QString &fileName)
     }
 
     readModules();
-    //readSourceFiles();
+    readSourceFiles();
     readTypedefs();
 
     prependToRecentFiles(fileName);
@@ -628,6 +628,8 @@ void MainWindow::readSourceFiles()
         }
     }
 
+    auto mdi = createMdiChild();
+
     for (auto it = map.constBegin(); it != map.constEnd(); ++it)
     {
         const QList<Path>& plist = it.value();
@@ -640,8 +642,9 @@ void MainWindow::readSourceFiles()
             str += plist.at(i).path() + "; ";
 
         str += ']';
-        qDebug() << str;
+        mdi->append(str);
     }
+    mdi->show();
 }
 
 void MainWindow::readTypedefs()
@@ -651,6 +654,9 @@ void MainWindow::readTypedefs()
     {
         addTypedef(typedefs.at(i), nullptr);
     }
+
+    _treeTypedefs->resizeColumnToContents(0);
+    _treeTypedefs->resizeColumnToContents(1);
 }
 
 void MainWindow::addModule(IDiaSymbol* compiland)
@@ -848,7 +854,7 @@ void MainWindow::addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent)
 void MainWindow::addTypedef(IDiaSymbol* symbol, QTreeWidgetItem* parent)
 {
     QString name = QDIA::getName(symbol);
-    QString type = QDIA::getTypeOfTypedef(symbol);
+    QString type = QDIA::getTypeInformation(symbol);
 
     QTreeWidgetItem* item = nullptr;
     if (parent)

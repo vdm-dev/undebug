@@ -187,200 +187,7 @@ QString QDIA::getUndName(IDiaSymbol* symbol)
     return result;
 }
 
-QString QDIA::getTypeString(IDiaSymbol* symbol)
-{
-    IDiaSymbol *pBaseType;
-    IDiaEnumSymbols *pEnumSym;
-    IDiaSymbol *pSym;
-    DWORD dwTag;
-    DWORD dwInfo;
-    BOOL bSet;
-    DWORD dwRank;
-    LONG lCount = 0;
-    ULONG celt = 1;
-
-    QString result;
-
-    if (FAILED(symbol->get_symTag(&dwTag)))
-        return result;
-
-    QString bstrName = getName(symbol);
-
-    if (dwTag != SymTagPointerType)
-    {
-        if ((symbol->get_constType(&bSet) == S_OK) && bSet)
-            result += "const ";
-
-        if ((symbol->get_volatileType(&bSet) == S_OK) && bSet)
-            result += "volatile ";
-
-        if ((symbol->get_unalignedType(&bSet) == S_OK) && bSet)
-            result += "__unaligned ";
-    }
-
-    ULONGLONG ulLen;
-
-    symbol->get_length(&ulLen);
-
-    switch (dwTag) {
-      case SymTagUDT:
-        //PrintUdtKind(symbol);
-        //PrintName(symbol);
-        break;
-
-      case SymTagEnum:
-        result += "enum ";
-        result += getUndName(symbol);
-        break;
-
-      case SymTagFunctionType:
-        result += "function ";
-        break;
-
-      case SymTagPointerType:
-        if (FAILED(symbol->get_type(&pBaseType)))
-          return result;
-
-        result += getTypeString(pBaseType);
-        pBaseType->Release();
-
-        if ((symbol->get_reference(&bSet) == S_OK) && bSet) {
-          result += " &";
-        }
-
-        else {
-          result += " *";
-        }
-
-        if ((symbol->get_constType(&bSet) == S_OK) && bSet) {
-          result += " const";
-        }
-
-        if ((symbol->get_volatileType(&bSet) == S_OK) && bSet) {
-          result += " volatile";
-        }
-
-        if ((symbol->get_unalignedType(&bSet) == S_OK) && bSet) {
-          result += " __unaligned";
-        }
-        break;
-
-      case SymTagArrayType:
-        break;
-
-      case SymTagBaseType:
-        if (symbol->get_baseType(&dwInfo) != S_OK) {
-          return result;
-        }
-
-        switch (dwInfo) {
-          case btUInt :
-            result += "unsigned ";
-
-          // Fall through
-
-          case btInt :
-            switch (ulLen) {
-              case 1:
-                if (dwInfo == btInt) {
-                  result += "signed ";
-                }
-
-                result += "char";
-                break;
-
-              case 2:
-                result += "short";
-                break;
-
-              case 4:
-                result += "int";
-                break;
-
-              case 8:
-                result += "__int64";
-                break;
-            }
-
-            dwInfo = 0xFFFFFFFF;
-            break;
-
-          case btFloat :
-            switch (ulLen) {
-              case 4:
-                result += "float";
-                break;
-
-              case 8:
-                result += "double";
-                break;
-            }
-
-            dwInfo = 0xFFFFFFFF;
-            break;
-        }
-
-        if (dwInfo == 0xFFFFFFFF) {
-           break;
-        }
-
-        //wprintf(L"%s", rgBaseType[dwInfo]);
-        break;
-
-      case SymTagTypedef:
-        result += bstrName;
-        break;
-
-      case SymTagCustomType:
-        {
-          DWORD idOEM, idOEMSym;
-          DWORD cbData = 0;
-          DWORD count;
-
-          if (symbol->get_oemId(&idOEM) == S_OK) {
-            wprintf(L"OEMId = %X, ", idOEM);
-          }
-
-          if (symbol->get_oemSymbolId(&idOEMSym) == S_OK) {
-            wprintf(L"SymbolId = %X, ", idOEMSym);
-          }
-
-          if (symbol->get_types(0, &count, NULL) == S_OK) {
-            IDiaSymbol** rgpDiaSymbols = (IDiaSymbol**) _alloca(sizeof(IDiaSymbol *) * count);
-
-            if (symbol->get_types(count, &count, rgpDiaSymbols) == S_OK) {
-              for (ULONG i = 0; i < count; i++) {
-                result += getTypeString(rgpDiaSymbols[i]);
-                rgpDiaSymbols[i]->Release();
-              }
-            }
-          }
-
-          // print custom data
-
-          if ((symbol->get_dataBytes(cbData, &cbData, NULL) == S_OK) && (cbData != 0)) {
-            wprintf(L", Data: ");
-
-            BYTE *pbData = new BYTE[cbData];
-
-            symbol->get_dataBytes(cbData, &cbData, pbData);
-
-            for (ULONG i = 0; i < cbData; i++) {
-              wprintf(L"0x%02X ", pbData[i]);
-            }
-
-            delete [] pbData;
-          }
-        }
-        break;
-
-      case SymTagData: // This really is member data, just print its location
-        break;
-    }
-    return result;
-}
-
-QString QDIA::getTypeOfTypedef(IDiaSymbol* symbol)
+QString QDIA::getTypeInformation(IDiaSymbol* symbol)
 {
     CComPtr<IDiaSymbol> typeSymbol = nullptr;
     DWORD tag;
@@ -392,27 +199,42 @@ QString QDIA::getTypeOfTypedef(IDiaSymbol* symbol)
     }
 
     QString result;
+    QString name = getName(typeSymbol);
 
     if (tag != SymTagPointerType)
     {
         BOOL flag;
         if (SUCCEEDED(typeSymbol->get_constType(&flag)) && flag)
-            result += "const ";
+            result += QStringLiteral("const ");
         if (SUCCEEDED(typeSymbol->get_volatileType(&flag)) && flag)
-            result += "volatile ";
+            result += QStringLiteral("volatile ");
         if (SUCCEEDED(typeSymbol->get_unalignedType(&flag)) && flag)
-            result += "__unaligned ";
+            result += QStringLiteral("__unaligned ");
     }
 
     switch (tag)
     {
     case SymTagBaseType:
         result += getNameOfBasicType(typeSymbol);
+        break;
     case SymTagPointerType:
         result += getNameOfPointerType(typeSymbol);
+        break;
     case SymTagTypedef:
+        result += name;
+        break;
+    case SymTagEnum:
+        result += QStringLiteral("enum ") + (name.isEmpty() ? QStringLiteral("<unnamed>") : name);
+        break;
+    case SymTagFunctionType:
+        result += QStringLiteral("<function>");
+        break;
+    case SymTagUDT:
+        result += getNameOfUserType(typeSymbol);
+        break;
     default:
-        result += getName(typeSymbol);
+        qDebug() << "Unhandled Type Tag:" << getSymbolTag(symbol);
+        result.clear();
         break;
     }
 
@@ -422,64 +244,83 @@ QString QDIA::getTypeOfTypedef(IDiaSymbol* symbol)
 QString QDIA::getNameOfBasicType(IDiaSymbol* baseType)
 {
     DWORD type;
-    if (FAILED(baseType->get_baseType(&type)))
+    ULONGLONG length;
+    if (FAILED(baseType->get_baseType(&type)) || FAILED(baseType->get_length(&length)))
         return QString();
 
     switch (type)
     {
     case btNoType:
-        qWarning() << "type == btNoType";
-        return "(no type)";
+        return QStringLiteral("<no type>");
     case btVoid:
-        return "void";
+        return QStringLiteral("void");
     case btChar:
-        return "char";
+        return QStringLiteral("char");
     case btWChar:
-        return "wchar_t";
+        return QStringLiteral("wchar_t");
     case btInt:
-        return "int";
+        switch (length)
+        {
+        case 1:
+            return QStringLiteral("signed char");
+        case 2:
+            return QStringLiteral("short");
+        case 4:
+            return QStringLiteral("int");
+        case 8:
+            return QStringLiteral("__int64");
+        }
+        return QStringLiteral("<unknown int>");
     case btUInt:
-        return "unsigned int";
+        switch (length)
+        {
+        case 1:
+            return QStringLiteral("unsigned char");
+        case 2:
+            return QStringLiteral("unsigned short");
+        case 4:
+            return QStringLiteral("unsigned int");
+        case 8:
+            return QStringLiteral("unsigned __int64");
+        }
+        return QStringLiteral("<unknown unsigned int>");
     case btFloat:
-        return "flot";
+        switch (length)
+        {
+        case 4:
+            return QStringLiteral("float");
+        case 8:
+            return QStringLiteral("double");
+        }
+        return QStringLiteral("<unknown float>");
     case btBCD:
-        qWarning() << "type == btBCD";
-        return "BCD";
+        return QStringLiteral("<BCD>");
     case btBool:
-        qWarning() << "type == btBool";
-        return "bool";
+        return QStringLiteral("bool");
     case btLong:
-        return "long";
+        return QStringLiteral("long");
     case btULong:
-        return "unsigned long";
+        return QStringLiteral("unsigned long");
     case btCurrency:
-        qWarning() << "type == btCurrency";
-        return "CURRENCY";
+        return QStringLiteral("<currency>");
     case btDate:
-        qWarning() << "type == btDate";
-        return "DATE";
+        return QStringLiteral("<date>");
     case btVariant:
-        qWarning() << "type == btVariant";
-        return "VARIANT";
+        return QStringLiteral("VARIANT");
     case btComplex:
-        qWarning() << "type == btComplex";
-        return "COMPLEX";
+        return QStringLiteral("<complex>");
     case btBit:
-        qWarning() << "type == btBit";
-        return "BIT";
+        return QStringLiteral("<bit>");
     case btBSTR:
-        return "BSTR";
+        return QStringLiteral("BSTR");
     case btHresult:
-        return "HRESULT";
+        return QStringLiteral("HRESULT");
     case btChar16:
-        qWarning() << "type == btChar16";
-        return "char16_t";
+        return QStringLiteral("char16_t");
     case btChar32:
-        qWarning() << "type == btChar32";
-        return "char32_t";
+        return QStringLiteral("char32_t");
     case btChar8:
-        qWarning() << "type == btChar8";
-        return "char8_t";
+        return QStringLiteral("char8_t");
     default:
         return QString();
     }
@@ -487,7 +328,7 @@ QString QDIA::getNameOfBasicType(IDiaSymbol* baseType)
 
 QString QDIA::getNameOfPointerType(IDiaSymbol* pointerType)
 {
-    QString result = getTypeOfTypedef(pointerType);
+    QString result = getTypeInformation(pointerType);
     if (result.isEmpty())
         return QString();
 
@@ -509,6 +350,44 @@ QString QDIA::getNameOfPointerType(IDiaSymbol* pointerType)
         result += " __unaligned";
 
     return result;
+}
+
+QString QDIA::getNameOfFunctionType(IDiaSymbol* functionType)
+{
+    CComPtr<IDiaSymbol> classParent;
+    functionType->get_classParent(&classParent);
+
+    CComPtr<IDiaSymbol> lexParent;
+    functionType->get_lexicalParent(&lexParent);
+
+    qDebug() << "getNameOfFunctionType" << getName(classParent) << getName(lexParent);
+
+    QString returnType = getTypeInformation(functionType);
+
+    return returnType + " function " + getName(functionType);
+}
+
+QString QDIA::getNameOfUserType(IDiaSymbol* userType)
+{
+    DWORD kind = 0;
+    if (FAILED(userType->get_udtKind(&kind)))
+        return QString();
+
+    QString name = getName(userType);
+
+    switch (kind)
+    {
+    case UdtStruct:
+        return QStringLiteral("struct ") + name;
+    case UdtClass:
+        return QStringLiteral("class ") + name;
+    case UdtUnion:
+        return QStringLiteral("union ") + name;
+    case UdtInterface:
+        return QStringLiteral("interface ") + name;
+    default:
+        return QStringLiteral("<no kind> ") + name;
+    }
 }
 
 QString QDIA::getSymbolTag(IDiaSymbol* symbol)
