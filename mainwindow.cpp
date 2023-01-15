@@ -19,6 +19,8 @@ MainWindow::MainWindow()
     createDockedTree(&_treeObjects, "Objects", QStringList({"Object", "Description"}));
     createDockedTree(&_treeTest, "Test", QStringList({"Test"}));
     createDockedTree(&_treeTypedefs, "Typedefs", QStringList({"Base Type", "New Type"}));
+    createDockedTree(&_treeEnums, "Enums", QStringList({"Name", "Value"}));
+    createDockedTree(&_treeUserTypes, "UDTs", QStringList({"Type", "Description"}));
 
 
     mdiArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -130,6 +132,8 @@ bool MainWindow::openFile(const QString &fileName)
     readModules();
     readSourceFiles();
     readTypedefs();
+    readEnums();
+    readUserTypes();
 
     prependToRecentFiles(fileName);
 
@@ -360,7 +364,7 @@ void MainWindow::createDockedTree(QTreeWidget** widget, const QString& name,
                                   const QStringList& header)
 {
     (*widget) = new QTreeWidget();
-    (*widget)->setMinimumWidth(250);
+    (*widget)->setMinimumWidth(350);
 
     if (!header.isEmpty())
     {
@@ -656,7 +660,26 @@ void MainWindow::readTypedefs()
     }
 
     _treeTypedefs->resizeColumnToContents(0);
-    _treeTypedefs->resizeColumnToContents(1);
+}
+
+void MainWindow::readEnums()
+{
+    QVector<IDiaSymbol*> enums = QDIA::findChildren(_diaSymbolGlobal, SymTagEnum);
+    for (int i = 0; i < enums.size(); ++i)
+    {
+        addEnum(enums.at(i), nullptr);
+    }
+    _treeEnums->resizeColumnToContents(0);
+}
+
+void MainWindow::readUserTypes()
+{
+    QVector<IDiaSymbol*> udts = QDIA::findChildren(_diaSymbolGlobal, SymTagUDT);
+    for (int i = 0; i < udts.size(); ++i)
+    {
+        addUserType(udts.at(i), nullptr);
+    }
+    _treeEnums->resizeColumnToContents(0);
 }
 
 void MainWindow::addModule(IDiaSymbol* compiland)
@@ -825,7 +848,12 @@ bool MainWindow::addObject(IDiaSymbol* compiland)
 void MainWindow::addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent)
 {
     QTreeWidgetItem* typedefsItem = new QTreeWidgetItem();
-    //addTypedef(compiland, typedefsItem);
+    QVector<IDiaSymbol*> typedefs = QDIA::findChildren(compiland, SymTagTypedef);
+    for (int i = 0; i < typedefs.size(); ++i)
+    {
+        addTypedef(typedefs.at(i), typedefsItem);
+        typedefs.at(i)->Release();
+    }
     if (typedefsItem->childCount() > 0)
     {
         parent->addChild(typedefsItem);
@@ -856,18 +884,20 @@ void MainWindow::addTypedef(IDiaSymbol* symbol, QTreeWidgetItem* parent)
     QString name = QDIA::getName(symbol);
     QString type = QDIA::getTypeInformation(symbol);
 
+    QTreeWidget* treeWidget = _treeTypedefs;
     QTreeWidgetItem* item = nullptr;
     if (parent)
     {
+        item = new QTreeWidgetItem();
         parent->addChild(item);
     }
     else
     {
-        int position = _treeTypedefs->topLevelItemCount();
+        int position = treeWidget->topLevelItemCount();
 
-        for (int i = 0; i < _treeTypedefs->topLevelItemCount(); ++i)
+        for (int i = 0; i < treeWidget->topLevelItemCount(); ++i)
         {
-            item = _treeTypedefs->topLevelItem(i);
+            item = treeWidget->topLevelItem(i);
 
             if (name > item->text(1))
                 continue;
@@ -880,12 +910,123 @@ void MainWindow::addTypedef(IDiaSymbol* symbol, QTreeWidgetItem* parent)
         }
 
         item = new QTreeWidgetItem();
-        _treeTypedefs->insertTopLevelItem(position, item);
+        treeWidget->insertTopLevelItem(position, item);
     }
     item->setText(0, type);
     item->setText(1, name);
     item->setIcon(0, QIcon(":/images/token_lookaround.png"));
 
+}
+
+void MainWindow::addEnum(IDiaSymbol* symbol, QTreeWidgetItem* parent)
+{
+    QString name = QDIA::getName(symbol);
+    QString type = QDIA::getTypeInformation(symbol);
+
+    if (type == QStringLiteral("int"))
+        type.clear();
+
+    QTreeWidget* treeWidget = _treeEnums;
+    QTreeWidgetItem* item = nullptr;
+    if (parent)
+    {
+        item = new QTreeWidgetItem();
+        parent->addChild(item);
+    }
+    else
+    {
+        int position = treeWidget->topLevelItemCount();
+
+        for (int i = 0; i < treeWidget->topLevelItemCount(); ++i)
+        {
+            item = treeWidget->topLevelItem(i);
+
+            if (name > item->text(0))
+                continue;
+
+            position = i;
+            break;
+        }
+
+        item = new QTreeWidgetItem();
+        treeWidget->insertTopLevelItem(position, item);
+    }
+    item->setText(0, name);
+    item->setText(1, type);
+    item->setIcon(0, QIcon(":/images/text_list_numbers.png"));
+
+    QVector<IDiaSymbol*> data = QDIA::findChildren(symbol, SymTagData);
+    for (int i = 0; i < data.size(); ++i)
+    {
+        IDiaSymbol* entity = data.at(i);
+        QTreeWidgetItem* subitem = new QTreeWidgetItem(item);
+        subitem->setText(0, QDIA::getName(entity));
+        subitem->setText(1, QDIA::getValue(entity).toString());
+        subitem->setIcon(0, QIcon(":/images/bullet_black.png"));
+        entity->Release();
+    }
+}
+
+void MainWindow::addUserType(IDiaSymbol* symbol, QTreeWidgetItem* parent)
+{
+    QString kind = QDIA::getUdtKind(symbol);
+    QString name = kind + QLatin1Char(' ') + QDIA::getName(symbol);
+    QString type = QDIA::getTypeInformation(symbol);
+
+    QTreeWidget* treeWidget = _treeUserTypes;
+    QTreeWidgetItem* item = nullptr;
+    if (parent)
+    {
+        item = new QTreeWidgetItem();
+        parent->addChild(item);
+    }
+    else
+    {
+        int position = treeWidget->topLevelItemCount();
+
+        for (int i = 0; i < treeWidget->topLevelItemCount(); ++i)
+        {
+            item = treeWidget->topLevelItem(i);
+
+            if (name > item->text(0))
+                continue;
+
+            position = i;
+            break;
+        }
+
+        item = new QTreeWidgetItem();
+        treeWidget->insertTopLevelItem(position, item);
+    }
+    item->setText(0, name);
+    item->setText(1, type);
+    if (kind == QStringLiteral("class"))
+    {
+        item->setIcon(0, QIcon(":/images/bricks.png"));
+    }
+    else if (kind == QStringLiteral("struct"))
+    {
+        item->setIcon(0, QIcon(":/images/bricks_struct.png"));
+    }
+    else if (kind == QStringLiteral("union"))
+    {
+        item->setIcon(0, QIcon(":/images/token_group.png"));
+    }
+    else
+    {
+        item->setIcon(0, QIcon(":/images/token_match_character_literally.png"));
+    }
+
+    QVector<IDiaSymbol*> data = QDIA::findChildren(symbol, SymTagData);
+    for (int i = 0; i < data.size(); ++i)
+    {
+        IDiaSymbol* entity = data.at(i);
+        QTreeWidgetItem* subitem = new QTreeWidgetItem(item);
+        subitem->setText(0, QDIA::getTypeInformation(entity) + QLatin1Char(' ') + QDIA::getName(entity));
+        subitem->setText(1, QDIA::getValue(entity).toString());
+        subitem->setIcon(0, QIcon(":/images/bullet_black.png"));
+        entity->Release();
+    }
 }
 
 void MainWindow::addSymbolFunctions(IDiaSymbol* compiland, QTreeWidgetItem* parent)
@@ -897,5 +1038,6 @@ void MainWindow::addSymbolFunctions(IDiaSymbol* compiland, QTreeWidgetItem* pare
         QTreeWidgetItem* functionItem = new QTreeWidgetItem(parent);
         functionItem->setText(0, QDIA::getUndName(function));
         functionItem->setIcon(0, QIcon(":/images/function.png"));
+        function->Release();
     }
 }

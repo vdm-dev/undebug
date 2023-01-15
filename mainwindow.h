@@ -110,10 +110,14 @@ private:
     void readModules();
     void readSourceFiles();
     void readTypedefs();
+    void readEnums();
+    void readUserTypes();
     void addModule(IDiaSymbol* compiland);
     bool addObject(IDiaSymbol* compiland);
     void addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent);
     void addTypedef(IDiaSymbol* symbol, QTreeWidgetItem* parent);
+    void addEnum(IDiaSymbol* symbol, QTreeWidgetItem* parent);
+    void addUserType(IDiaSymbol* symbol, QTreeWidgetItem* parent);
     void addSymbolFunctions(IDiaSymbol* compiland, QTreeWidgetItem* parent);
 
 private:
@@ -142,6 +146,8 @@ private:
     QTreeWidget* _treeSources;
     QTreeWidget* _treeTest;
     QTreeWidget* _treeTypedefs;
+    QTreeWidget* _treeEnums;
+    QTreeWidget* _treeUserTypes;
 
 private:
     HMODULE _library;

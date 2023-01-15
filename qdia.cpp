@@ -390,6 +390,11 @@ QString QDIA::getNameOfUserType(IDiaSymbol* userType)
     }
 }
 
+QString QDIA::getEnumInformation(IDiaSymbol* symbol)
+{
+    return getUndName(symbol) + QStringLiteral(" : ") + getTypeInformation(symbol);
+}
+
 QString QDIA::getSymbolTag(IDiaSymbol* symbol)
 {
     if (!symbol)
@@ -536,6 +541,30 @@ QString QDIA::getSymbolTag(IDiaSymbol* symbol)
     case SymTagMax:
         return QStringLiteral("SymTagMax");
 
+    default:
+        return QString();
+    }
+}
+
+QString QDIA::getUdtKind(IDiaSymbol* udt)
+{
+    if (!udt)
+        return QString();
+
+    DWORD kind;
+    if (FAILED(udt->get_udtKind(&kind)))
+        return QString();
+
+    switch (kind)
+    {
+    case UdtStruct:
+        return QStringLiteral("struct");
+    case UdtClass:
+        return QStringLiteral("class");
+    case UdtUnion:
+        return QStringLiteral("union");
+    case UdtInterface:
+        return QStringLiteral("interface");
     default:
         return QString();
     }

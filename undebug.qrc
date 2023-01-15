@@ -19,5 +19,11 @@
         <file>images/database_green.png</file>
         <file>images/text_functions.png</file>
         <file>images/token_lookaround.png</file>
+        <file>images/text_list_numbers.png</file>
+        <file>images/bullet_black.png</file>
+        <file>images/bricks.png</file>
+        <file>images/bricks_struct.png</file>
+        <file>images/token_group.png</file>
+        <file>images/token_match_character_literally.png</file>
     </qresource>
 </RCC>

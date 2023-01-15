@@ -28,7 +28,9 @@ public:
     static QString getNameOfPointerType(IDiaSymbol* pointerType);
     static QString getNameOfFunctionType(IDiaSymbol* functionType);
     static QString getNameOfUserType(IDiaSymbol* userType);
+    static QString getEnumInformation(IDiaSymbol* symbol);
     static QString getSymbolTag(IDiaSymbol* symbol);
+    static QString getUdtKind(IDiaSymbol* udt);
 };
 
 #endif // QDIA_H
