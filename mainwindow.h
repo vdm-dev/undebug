@@ -115,6 +115,7 @@ private:
     void addModule(IDiaSymbol* compiland);
     bool addObject(IDiaSymbol* compiland);
     void addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent);
+    void addSourceFiles(IDiaSymbol* compiland, QTreeWidgetItem* parent);
     void addTypedef(IDiaSymbol* symbol, QTreeWidgetItem* parent);
     void addEnum(IDiaSymbol* symbol, QTreeWidgetItem* parent);
     void addUserType(IDiaSymbol* symbol, QTreeWidgetItem* parent);

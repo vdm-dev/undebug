@@ -25,5 +25,7 @@
         <file>images/bricks_struct.png</file>
         <file>images/token_group.png</file>
         <file>images/token_match_character_literally.png</file>
+        <file>images/source_code.png</file>
+        <file>images/folder_page.png</file>
     </qresource>
 </RCC>

@@ -752,6 +752,9 @@ void MainWindow::addModule(IDiaSymbol* compiland)
     {
         item->setIcon(0, QIcon(":/images/page_error.png"));
     }
+
+    addSymbols(compiland, item);
+    addSourceFiles(compiland, item);
 }
 
 bool MainWindow::addObject(IDiaSymbol* compiland)
@@ -841,6 +844,7 @@ bool MainWindow::addObject(IDiaSymbol* compiland)
     objectItem->setIcon(0, QIcon(":/images/module.png"));
 
     addSymbols(compiland, objectItem);
+    addSourceFiles(compiland, objectItem);
 
     return true;
 }
@@ -876,6 +880,37 @@ void MainWindow::addSymbols(IDiaSymbol* compiland, QTreeWidgetItem* parent)
     else
     {
         delete functionsItem;
+    }
+}
+
+void MainWindow::addSourceFiles(IDiaSymbol* compiland, QTreeWidgetItem* parent)
+{
+    QTreeWidgetItem* filesItem = new QTreeWidgetItem();
+
+    QVector<IDiaSourceFile*> files = QDIA::findSourceFiles(_diaSession, compiland);
+    for (int j = 0; j < files.size(); ++j)
+    {
+        IDiaSourceFile* file = files.at(j);
+        QString filePath = QDIA::getFileName(file);
+        file->Release();
+        QString fileName;
+        int slash = qMax(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+        fileName = (slash >= 0) ? filePath.mid(slash + 1) : filePath;
+        QTreeWidgetItem* item = new QTreeWidgetItem(filesItem);
+        item->setText(0, fileName);
+        item->setText(1, filePath);
+        item->setIcon(0, QIcon(":/images/source_code.png"));
+    }
+
+    if (filesItem->childCount() > 0)
+    {
+        parent->addChild(filesItem);
+        filesItem->setText(0, QStringLiteral("Source Code (%1)").arg(filesItem->childCount()));
+        filesItem->setIcon(0, QIcon(":/images/folder_page.png"));
+    }
+    else
+    {
+        delete filesItem;
     }
 }
 
